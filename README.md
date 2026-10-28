@@ -11,10 +11,10 @@ unverified tags fail the build.
 
 The pipeline reads the required Zig version from the source and downloads the
 matching compiler from ziglang.org with SHA-256 verification. GTK, fontconfig,
-and gtk4-layer-shell use Debian's system libraries; other dependencies use Zig's
-source builds. Blueprint 0.20.4 is installed into the temporary build directory
-from its pinned GNOME source commit with SHA-256 verification, because Debian
-13's packaged compiler is too old for Ghostty 1.4's Git source.
+gtk4-layer-shell, FreeType, libpng, and zlib use Debian's system libraries;
+other dependencies use Zig's source builds. Blueprint 0.20.4 is installed into
+the temporary build directory from its pinned GNOME source commit with SHA-256
+verification. Debian 13's packaged compiler is too old for Ghostty 1.4's Git source.
 GitHub's automatic `GITHUB_TOKEN` supplies API access; no additional repository
 secrets or external APT credentials are needed.
 

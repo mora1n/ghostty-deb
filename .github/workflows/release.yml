@@ -103,13 +103,17 @@ jobs:
             gettext \
             jq \
             libadwaita-1-dev \
+            libbz2-dev \
+            libfreetype-dev \
             libgtk-4-dev \
             libgtk4-layer-shell-dev \
+            libpng-dev zlib1g-dev \
             libxml2-utils \
             lintian \
             meson \
             ninja-build \
             pandoc \
+            patchelf \
             pkg-config \
             python3-gi \
             tar \

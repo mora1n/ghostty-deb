@@ -33,14 +33,14 @@ case "$arch" in
     ;;
 esac
 
-for command_name in curl jq tar sha256sum dpkg-deb dpkg-shlibdeps file meson; do
+for command_name in curl jq tar sha256sum dpkg-deb dpkg-shlibdeps file meson patchelf; do
   command -v "$command_name" >/dev/null || {
     echo "required command is missing: $command_name" >&2
     exit 1
   }
 done
 
-pkg_config_modules=(gtk4 libadwaita-1 gtk4-layer-shell-0)
+pkg_config_modules=(gtk4 libadwaita-1 gtk4-layer-shell-0 freetype2 libpng zlib)
 for module in "${pkg_config_modules[@]}"; do
   pkg-config --exists "$module" || {
     echo "required pkg-config module is missing: $module" >&2
@@ -128,6 +128,9 @@ blueprint-compiler --version
 local_cache="$work_dir/local-cache"
 cd "$source_dir"
 
+# Debian names the bzip2 linker library bz2.
+sed -i 's/linkSystemLibrary("bzip2",/linkSystemLibrary("bz2",/' src/build/SharedDeps.zig
+
 staging="$work_dir/staging"
 ZIG_GLOBAL_CACHE_DIR="$work_dir/global-cache" \
 ZIG_LOCAL_CACHE_DIR="$local_cache" \
@@ -138,14 +141,21 @@ DESTDIR="$staging" \
     -Dcpu=baseline \
     -Demit-docs \
     -Dstrip \
+    -Dpie=true \
     -Dversion-string="$version" \
     -fsys=fontconfig \
     -fsys=gtk4-layer-shell \
+    -fsys=freetype \
+    -fsys=libpng \
+    -fsys=zlib \
     -Dinstalled-exe-path=/usr/bin/ghostty
 
 # Package the terminal application; libghostty-vt development files are separate products.
 rm -rf "$staging/usr/include" "$staging/usr/lib" "$staging/usr/share/pkgconfig"
 mv "$staging/usr/share/zsh/site-functions" "$staging/usr/share/zsh/vendor-completions"
+chmod 0644 "$staging/usr/share/kio/servicemenus/com.mitchellh.ghostty.desktop"
+patchelf --remove-rpath "$staging/usr/bin/ghostty"
+find "$staging/usr/share/man" -type f -name '*.[1-9]' -exec gzip -n -9 {} +
 
 install -D -m 0644 "$source_dir/LICENSE" \
   "$staging/usr/share/doc/ghostty/copyright"
@@ -156,7 +166,7 @@ ghostty (${version}-1) stable; urgency=medium
 
  -- mora1n <55047233+mora1n@users.noreply.github.com>  $(date -R)
 EOF
-gzip -n -c "$work_dir/changelog.Debian" \
+gzip -n -9 -c "$work_dir/changelog.Debian" \
   > "$staging/usr/share/doc/ghostty/changelog.Debian.gz"
 
 readarray -d '' elf_files < <(
