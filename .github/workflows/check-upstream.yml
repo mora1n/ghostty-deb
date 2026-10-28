@@ -46,7 +46,7 @@ jobs:
           REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
-          tag="ghostty-v${VERSION}"
+          tag="v${VERSION}"
           if gh api "repos/${REPOSITORY}/releases/tags/${tag}" >/dev/null 2>&1; then
             echo "Already released: ${tag}"
             exit 0

@@ -95,6 +95,7 @@ jobs:
             desktop-file-utils \
             dpkg-dev \
             file \
+            git \
             gettext \
             jq \
             libadwaita-1-dev \
@@ -222,13 +223,29 @@ jobs:
           service and verified with Ghostty's published Minisign key.
           EOF
 
+      - name: Ensure matching Git tag exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.validate.outputs.version }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          tag="v${VERSION}"
+          if gh api "repos/${REPOSITORY}/git/ref/tags/${tag}" >/dev/null 2>&1; then
+            echo "Tag already exists: ${tag}"
+            exit 0
+          fi
+          gh api --method POST "repos/${REPOSITORY}/git/refs" \
+            -f "ref=refs/tags/${tag}" \
+            -f "sha=${GITHUB_SHA}"
+
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.validate.outputs.version }}
         run: |
           set -euo pipefail
-          tag="ghostty-v${VERSION}"
+          tag="v${VERSION}"
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" release/*.deb release/SHA256SUMS \
               release/build-metadata.json --clobber
