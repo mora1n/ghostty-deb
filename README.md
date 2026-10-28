@@ -5,8 +5,9 @@ and publishes them as free GitHub Release assets.
 
 The package pipeline follows Ghostty's downstream packaging guidance: it uses
 the versioned upstream source tarball, verifies its Minisign signature, reads
-the required Zig version from that source, and builds with Debian's system
-libraries.
+the required Zig version from that source, and downloads the matching compiler
+from ziglang.org with SHA-256 verification. GTK, fontconfig, and gtk4-layer-shell
+use Debian's system libraries; other dependencies use Zig's source builds.
 
 ## Supported targets
 
@@ -43,6 +44,11 @@ The upstream checker runs hourly and compares stable `vX.Y.Z` tags in
 version starts one build for each architecture. The release is created only
 after both packages pass metadata, dependency, lint, and clean Debian 13
 installation checks.
+
+Each release uses the matching `vX.Y.Z` Git tag, pointing to the packaging
+commit used by that workflow. The workflow creates the tag before publishing
+and verifies that it exists. Rebuilding an existing release replaces its assets
+without moving its tag.
 
 GitHub Actions artifacts are temporary handoff files. This repository does not
 use Actions caches, does not create a GitHub Gist, and deletes the current run's

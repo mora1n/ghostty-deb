@@ -100,23 +100,32 @@ zig_root="$work_dir/zig"
 mkdir -p "$zig_root"
 tar -xJf "$zig_archive" --strip-components=1 -C "$zig_root"
 zig="$zig_root/zig"
+export PATH="$zig_root:$PATH"
 
-offline_cache="$work_dir/offline-cache"
 local_cache="$work_dir/local-cache"
-ZIG_GLOBAL_CACHE_DIR="$offline_cache" \
-  sh "$source_dir/nix/build-support/fetch-zig-cache.sh"
+cd "$source_dir"
 
 staging="$work_dir/staging"
-ZIG_GLOBAL_CACHE_DIR="$offline_cache" \
+ZIG_GLOBAL_CACHE_DIR="$work_dir/global-cache" \
 ZIG_LOCAL_CACHE_DIR="$local_cache" \
 DESTDIR="$staging" \
   "$zig" build \
     --prefix /usr \
-    --system "$offline_cache/p" \
     -Doptimize=ReleaseFast \
     -Dcpu=baseline \
     -Demit-docs \
+    -Dstrip \
+    -Dversion-string="$version" \
+    -fsys=fontconfig \
+    -fsys=gtk4-layer-shell \
     -Dinstalled-exe-path=/usr/bin/ghostty
+
+# Package the terminal application; libghostty-vt development files are separate products.
+rm -rf "$staging/usr/include" "$staging/usr/lib" "$staging/usr/share/pkgconfig"
+# Debian's ncurses-term already owns this entry; xterm-ghostty is ours.
+rm "$staging/usr/share/terminfo/g/ghostty"
+rmdir "$staging/usr/share/terminfo/g"
+mv "$staging/usr/share/zsh/site-functions" "$staging/usr/share/zsh/vendor-completions"
 
 install -D -m 0644 "$source_dir/LICENSE" \
   "$staging/usr/share/doc/ghostty/copyright"
@@ -138,13 +147,12 @@ readarray -d '' elf_files < <(
   exit 1
 }
 
-shlib_output="$(
-  dpkg-shlibdeps -O "${elf_files[@]}" 2>"$work_dir/shlibdeps.stderr"
-)"
+mkdir -p debian
+printf 'Source: ghostty\n\nPackage: ghostty\nArchitecture: any\n' > debian/control
+shlib_output="$(dpkg-shlibdeps -O "${elf_files[@]}")"
 depends="$(printf '%s\n' "$shlib_output" |
   sed -n 's/^shlibs:Depends=//p' | tail -n 1)"
 [[ -n "$depends" ]] || {
-  cat "$work_dir/shlibdeps.stderr" >&2
   echo "dpkg-shlibdeps did not produce runtime dependencies" >&2
   exit 1
 }
