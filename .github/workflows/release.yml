@@ -133,9 +133,10 @@ jobs:
           [[ "$(dpkg-deb -f "$deb" Package)" == ghostty ]]
           [[ "$(dpkg-deb -f "$deb" Version)" == "${VERSION}-1" ]]
           [[ "$(dpkg-deb -f "$deb" Architecture)" == "${{ matrix.architecture }}" ]]
-          desktop-file-validate \
-            <(dpkg-deb --fsys-tarfile "$deb" | tar -xOf - \
-              ./usr/share/applications/com.mitchellh.ghostty.desktop)
+          desktop_file="$RUNNER_TEMP/com.mitchellh.ghostty.desktop"
+          dpkg-deb --fsys-tarfile "$deb" | tar -xOf - \
+            ./usr/share/applications/com.mitchellh.ghostty.desktop > "$desktop_file"
+          desktop-file-validate "$desktop_file"
           lintian --fail-on error "$deb"
 
       - name: Upload temporary package artifact
