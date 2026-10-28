@@ -34,12 +34,11 @@ jobs:
         run: |
           apt-get update
           apt-get install -y --no-install-recommends \
-            ca-certificates desktop-file-utils gh
+            ca-certificates desktop-file-utils curl
 
       - name: Download and verify published package
         env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
+          REPOSITORY: ${{ github.repository }}
           VERSION: ${{ inputs.ghostty_version }}
           ARCHITECTURE: ${{ matrix.architecture }}
         run: |
@@ -49,9 +48,11 @@ jobs:
             exit 1
           }
           deb="ghostty_${VERSION}-1_${ARCHITECTURE}.deb"
-          gh release download "v${VERSION}" --dir package \
-            --pattern "$deb" --pattern SHA256SUMS
+          release_url="https://github.com/${REPOSITORY}/releases/download/v${VERSION}"
+          mkdir package
           cd package
+          curl --fail --location --output "$deb" "$release_url/$deb"
+          curl --fail --location --output SHA256SUMS "$release_url/SHA256SUMS"
           sha256sum --ignore-missing -c SHA256SUMS
           [[ "$(dpkg-deb -f "$deb" Package)" == ghostty ]]
           [[ "$(dpkg-deb -f "$deb" Version)" == "${VERSION}-1" ]]
