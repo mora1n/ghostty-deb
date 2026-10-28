@@ -63,8 +63,8 @@ source_archive="$work_dir/ghostty-${version}.tar.gz"
 signature_file="${source_archive}.minisig"
 public_key="RWQlAjJC23149WL2sEpT/l0QKy7hMIFhYdQOFy0Z7z7PbneUgvlsnYcV"
 
-curl --fail --location --retry 3 --output "$source_archive" "$source_url"
-curl --fail --location --retry 3 --output "$signature_file" "$signature_url"
+curl --http1.1 --fail --location --retry 3 --output "$source_archive" "$source_url"
+curl --http1.1 --fail --location --retry 3 --output "$signature_file" "$signature_url"
 minisign -Vm "$source_archive" -x "$signature_file" -P "$public_key"
 source_sha256="$(sha256sum "$source_archive" | awk '{print $1}')"
 
