@@ -257,9 +257,9 @@ jobs:
           REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
-          gh api --paginate \
+          gh api \
             "repos/${REPOSITORY}/actions/runs/${RUN_ID}/artifacts?per_page=100" \
-            --jq '.[].id' |
+            --jq '.artifacts[]?.id' |
           while read -r artifact_id; do
             [[ -n "$artifact_id" ]] || continue
             gh api --method DELETE \

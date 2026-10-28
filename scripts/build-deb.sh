@@ -104,7 +104,7 @@ zig="$zig_root/zig"
 offline_cache="$work_dir/offline-cache"
 local_cache="$work_dir/local-cache"
 ZIG_GLOBAL_CACHE_DIR="$offline_cache" \
-  "$zig" "$source_dir/nix/build-support/fetch-zig-cache.sh"
+  sh "$source_dir/nix/build-support/fetch-zig-cache.sh"
 
 staging="$work_dir/staging"
 ZIG_GLOBAL_CACHE_DIR="$offline_cache" \
