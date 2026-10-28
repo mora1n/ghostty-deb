@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  shell:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends shellcheck
+
+      - name: Check shell syntax
+        run: bash -n scripts/build-deb.sh
+
+      - name: Run shellcheck
+        run: shellcheck scripts/build-deb.sh
+
+      - name: Check workflow syntax
+        run: |
+          curl --fail --location --retry 3 \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz \
+            | tar -xz -C "$RUNNER_TEMP"
+          "$RUNNER_TEMP/actionlint"
+
+      - name: Check whitespace
+        run: git diff --check

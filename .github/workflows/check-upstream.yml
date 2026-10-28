@@ -1,0 +1,71 @@
+name: Check upstream Ghostty release
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: check-upstream
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Find the newest stable Ghostty tag
+        id: upstream
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="$(
+            gh api --paginate 'repos/ghostty-org/ghostty/tags?per_page=100' \
+              --jq '.[].name' |
+              grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' |
+              sed 's/^v//' |
+              sort -V |
+              tail -n 1
+          )"
+          [[ -n "$version" ]] || {
+            echo "::error::No stable Ghostty tag was found"
+            exit 1
+          }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Upstream stable version: $version"
+
+      - name: Skip if already released or currently building
+        id: decision
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.upstream.outputs.version }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          tag="ghostty-v${VERSION}"
+          if gh api "repos/${REPOSITORY}/releases/tags/${tag}" >/dev/null 2>&1; then
+            echo "Already released: ${tag}"
+            exit 0
+          fi
+
+          active="$(
+            gh run list --workflow release.yml --json status \
+              --jq '[.[] | select(.status == "queued" or .status == "in_progress")] | length'
+          )"
+          if [[ "$active" -gt 0 ]]; then
+            echo "A release workflow is already active"
+            exit 0
+          fi
+
+          echo "new_release=true" >> "$GITHUB_OUTPUT"
+
+      - name: Dispatch release workflow
+        if: steps.decision.outputs.new_release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.upstream.outputs.version }}
+        run: gh workflow run release.yml -f ghostty_version="$VERSION"

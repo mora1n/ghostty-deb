@@ -1,0 +1,265 @@
+name: Build and release Ghostty
+
+on:
+  workflow_dispatch:
+    inputs:
+      ghostty_version:
+        description: Stable Ghostty version without the leading v
+        required: true
+        type: string
+      force_rebuild:
+        description: Replace assets in an existing Ghostty release
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: ghostty-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      should_build: ${{ steps.decision.outputs.should_build }}
+    steps:
+      - name: Validate version
+        id: version
+        env:
+          VERSION: ${{ inputs.ghostty_version }}
+        run: |
+          set -euo pipefail
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "::error::ghostty_version must match X.Y.Z"
+            exit 1
+          }
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Validate upstream tag
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          git ls-remote --exit-code --tags --refs \
+            https://github.com/ghostty-org/ghostty.git \
+            "refs/tags/v${VERSION}" >/dev/null
+
+      - name: Decide whether to build
+        id: decision
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          FORCE_REBUILD: ${{ inputs.force_rebuild }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          tag="ghostty-v${VERSION}"
+          if [[ "$FORCE_REBUILD" != "true" ]] &&
+            gh api "repos/${REPOSITORY}/releases/tags/${tag}" >/dev/null 2>&1; then
+            echo "Release already exists: ${tag}"
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "should_build=true" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: validate
+    if: needs.validate.outputs.should_build == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - architecture: amd64
+            runner: ubuntu-24.04
+          - architecture: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    container: debian:13
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install build dependencies
+        run: |
+          set -euo pipefail
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential \
+            ca-certificates \
+            curl \
+            desktop-file-utils \
+            dpkg-dev \
+            file \
+            gettext \
+            jq \
+            libadwaita-1-dev \
+            libgtk-4-dev \
+            libgtk4-layer-shell-dev \
+            libxml2-utils \
+            lintian \
+            minisign \
+            pkg-config \
+            tar \
+            xz-utils \
+            zstd
+
+      - name: Build Debian package
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          mkdir -p "out/${{ matrix.architecture }}"
+          scripts/build-deb.sh "$VERSION" "out/${{ matrix.architecture }}"
+          mv "out/${{ matrix.architecture }}/build-metadata.json" \
+            "out/${{ matrix.architecture }}/build-metadata-${{ matrix.architecture }}.json"
+
+      - name: Validate package
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          set -euo pipefail
+          deb="$(find "out/${{ matrix.architecture }}" -name '*.deb' -print -quit)"
+          [[ -n "$deb" ]] || exit 1
+          [[ "$(dpkg-deb -f "$deb" Package)" == ghostty ]]
+          [[ "$(dpkg-deb -f "$deb" Version)" == "${VERSION}-1" ]]
+          [[ "$(dpkg-deb -f "$deb" Architecture)" == "${{ matrix.architecture }}" ]]
+          desktop-file-validate \
+            <(dpkg-deb --fsys-tarfile "$deb" | tar -xOf - \
+              ./usr/share/applications/com.mitchellh.ghostty.desktop)
+          lintian --fail-on error "$deb"
+
+      - name: Upload temporary package artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: deb-${{ matrix.architecture }}
+          path: out/${{ matrix.architecture }}/*
+          if-no-files-found: error
+          retention-days: 1
+
+  smoke:
+    needs: [validate, build]
+    if: needs.validate.outputs.should_build == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - architecture: amd64
+            runner: ubuntu-24.04
+          - architecture: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    container: debian:13
+    permissions:
+      contents: read
+    steps:
+      - name: Install runtime verification tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates \
+            desktop-file-utils \
+            file
+
+      - name: Download package artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: deb-${{ matrix.architecture }}
+          path: package
+
+      - name: Install and smoke test
+        run: |
+          set -euo pipefail
+          deb="$(find package -name '*.deb' -print -quit)"
+          apt-get install -y "$deb"
+          ghostty --version
+          ! ldd /usr/bin/ghostty | grep -F 'not found'
+          desktop-file-validate /usr/share/applications/com.mitchellh.ghostty.desktop
+          dpkg-query -W -f='${Status}\n' ghostty | grep -F 'install ok installed'
+
+  release:
+    needs: [validate, smoke]
+    if: needs.validate.outputs.should_build == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download package artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: deb-*
+          merge-multiple: true
+          path: release
+
+      - name: Prepare release assets
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          set -euo pipefail
+          cd release
+          sha256sum *.deb > SHA256SUMS
+          jq -s --arg version "$VERSION" \
+            '{ghostty_version: $version, builds: .}' \
+            build-metadata-*.json > build-metadata.json
+          rm -f build-metadata-*.json
+          cat > release-notes.md <<EOF
+          ## Ghostty ${VERSION} for Debian 13
+
+          This release contains native Debian 13 packages for \`amd64\` and \`arm64\`.
+
+          Install with:
+
+          \`\`\`sh
+          sudo apt install ./ghostty_${VERSION}-1_<architecture>.deb
+          \`\`\`
+
+          The source tarball was downloaded from the official Ghostty release
+          service and verified with Ghostty's published Minisign key.
+          EOF
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          set -euo pipefail
+          tag="ghostty-v${VERSION}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" release/*.deb release/SHA256SUMS \
+              release/build-metadata.json --clobber
+            gh release edit "$tag" \
+              --title "Ghostty ${VERSION} (Debian 13)" \
+              --notes-file release/release-notes.md
+          else
+            gh release create "$tag" \
+              --target "$GITHUB_SHA" \
+              --title "Ghostty ${VERSION} (Debian 13)" \
+              --notes-file release/release-notes.md \
+              release/*.deb release/SHA256SUMS release/build-metadata.json
+          fi
+
+  cleanup:
+    needs: [validate, build, smoke, release]
+    if: always()
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: write
+    steps:
+      - name: Delete current run artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh api --paginate \
+            "repos/${REPOSITORY}/actions/runs/${RUN_ID}/artifacts?per_page=100" \
+            --jq '.[].id' |
+          while read -r artifact_id; do
+            [[ -n "$artifact_id" ]] || continue
+            gh api --method DELETE \
+              "repos/${REPOSITORY}/actions/artifacts/${artifact_id}"
+          done

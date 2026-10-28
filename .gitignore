@@ -1,0 +1,8 @@
+out/
+build/
+.artifacts/
+.cache/
+*.deb
+*.tar.gz
+*.tar.xz
+*.minisig
