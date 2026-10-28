@@ -145,9 +145,6 @@ DESTDIR="$staging" \
 
 # Package the terminal application; libghostty-vt development files are separate products.
 rm -rf "$staging/usr/include" "$staging/usr/lib" "$staging/usr/share/pkgconfig"
-# Debian's ncurses-term already owns this entry; xterm-ghostty is ours.
-rm "$staging/usr/share/terminfo/g/ghostty"
-rmdir "$staging/usr/share/terminfo/g"
 mv "$staging/usr/share/zsh/site-functions" "$staging/usr/share/zsh/vendor-completions"
 
 install -D -m 0644 "$source_dir/LICENSE" \

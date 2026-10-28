@@ -186,6 +186,7 @@ jobs:
           deb="$(find "$PWD/package" -name '*.deb' -print -quit)"
           apt-get install -y "$deb"
           ghostty --version
+          infocmp xterm-ghostty >/dev/null
           if ldd /usr/bin/ghostty | grep -F 'not found'; then
             exit 1
           fi
