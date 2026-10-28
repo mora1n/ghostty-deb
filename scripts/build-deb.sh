@@ -33,7 +33,7 @@ case "$arch" in
     ;;
 esac
 
-for command_name in curl jq minisign tar sha256sum dpkg-deb dpkg-shlibdeps file; do
+for command_name in curl jq tar sha256sum dpkg-deb dpkg-shlibdeps file; do
   command -v "$command_name" >/dev/null || {
     echo "required command is missing: $command_name" >&2
     exit 1
@@ -57,15 +57,23 @@ cleanup() {
 }
 trap cleanup EXIT
 
-source_url="https://release.files.ghostty.org/${version}/ghostty-${version}.tar.gz"
-signature_url="${source_url}.minisig"
+github_api="https://api.github.com/repos/ghostty-org/ghostty"
+authorization="Authorization: Bearer ${GH_TOKEN:?GH_TOKEN is required to verify upstream tags}"
+tag_ref="$work_dir/tag-ref.json"
+tag_object="$work_dir/tag.json"
+curl --fail --location --retry 3 --header "$authorization" \
+  --output "$tag_ref" "$github_api/git/ref/tags/v${version}"
+tag_sha="$(jq -er '.object | select(.type == "tag") | .sha' "$tag_ref")"
+curl --fail --location --retry 3 --header "$authorization" \
+  --output "$tag_object" "$github_api/git/tags/$tag_sha"
+source_commit="$(jq -er --arg tag "v${version}" \
+  'select(.tag == $tag and .verification.verified == true and .object.type == "commit")
+   | .object.sha' "$tag_object")"
+source_url="$github_api/tarball/$source_commit"
 source_archive="$work_dir/ghostty-${version}.tar.gz"
-signature_file="${source_archive}.minisig"
-public_key="RWQlAjJC23149WL2sEpT/l0QKy7hMIFhYdQOFy0Z7z7PbneUgvlsnYcV"
 
-curl --http1.1 --fail --location --retry 3 --output "$source_archive" "$source_url"
-curl --http1.1 --fail --location --retry 3 --output "$signature_file" "$signature_url"
-minisign -Vm "$source_archive" -x "$signature_file" -P "$public_key"
+curl --fail --location --retry 3 --header "$authorization" \
+  --output "$source_archive" "$source_url"
 source_sha256="$(sha256sum "$source_archive" | awk '{print $1}')"
 
 tar -xzf "$source_archive" -C "$work_dir"
@@ -132,7 +140,7 @@ install -D -m 0644 "$source_dir/LICENSE" \
 cat > "$work_dir/changelog.Debian" <<EOF
 ghostty (${version}-1) stable; urgency=medium
 
-  * Build Ghostty ${version} from the upstream signed source tarball.
+  * Build Ghostty ${version} from the upstream verified Git tag.
 
  -- mora1n <55047233+mora1n@users.noreply.github.com>  $(date -R)
 EOF
@@ -186,6 +194,8 @@ jq -n \
   --arg architecture "$arch" \
   --arg source_url "$source_url" \
   --arg source_sha256 "$source_sha256" \
+  --arg source_commit "$source_commit" \
+  --arg source_tag_sha "$tag_sha" \
   --arg zig_version "$zig_version" \
   '{
     ghostty_version: $version,
@@ -193,6 +203,9 @@ jq -n \
     architecture: $architecture,
     source_url: $source_url,
     source_sha256: $source_sha256,
+    source_commit: $source_commit,
+    source_tag_sha: $source_tag_sha,
+    source_tag_verified: true,
     zig_version: $zig_version,
     base_distribution: "debian:13"
   }' > "$output_dir/build-metadata.json"

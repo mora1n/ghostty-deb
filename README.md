@@ -3,11 +3,17 @@
 This repository builds unofficial Debian 13 packages for [Ghostty](https://ghostty.org/)
 and publishes them as free GitHub Release assets.
 
-The package pipeline follows Ghostty's downstream packaging guidance: it uses
-the versioned upstream source tarball, verifies its Minisign signature, reads
-the required Zig version from that source, and downloads the matching compiler
-from ziglang.org with SHA-256 verification. GTK, fontconfig, and gtk4-layer-shell
-use Debian's system libraries; other dependencies use Zig's source builds.
+Like `dariogriffo/ghostty-debian`, the package pipeline builds from the official
+Ghostty GitHub release tag. It requires GitHub's signature verification to pass
+for that tag, downloads source at the exact referenced commit, and records the
+tag object, commit, and archive SHA-256 in the build metadata. Unsigned or
+unverified tags fail the build.
+
+The pipeline reads the required Zig version from the source and downloads the
+matching compiler from ziglang.org with SHA-256 verification. GTK, fontconfig,
+and gtk4-layer-shell use Debian's system libraries; other dependencies use Zig's
+source builds. GitHub's automatic `GITHUB_TOKEN` supplies API access; no additional
+repository secrets or external APT credentials are needed.
 
 ## Supported targets
 

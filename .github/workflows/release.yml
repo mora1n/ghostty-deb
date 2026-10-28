@@ -94,6 +94,7 @@ jobs:
           apt-get update
           apt-get install -y --no-install-recommends \
             build-essential \
+            blueprint-compiler \
             ca-certificates \
             curl \
             desktop-file-utils \
@@ -107,7 +108,6 @@ jobs:
             libgtk4-layer-shell-dev \
             libxml2-utils \
             lintian \
-            minisign \
             pandoc \
             pkg-config \
             tar \
@@ -116,6 +116,7 @@ jobs:
 
       - name: Build Debian package
         env:
+          GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.validate.outputs.version }}
         run: |
           mkdir -p "out/${{ matrix.architecture }}"
@@ -225,8 +226,10 @@ jobs:
           sudo apt install ./ghostty_${VERSION}-1_<architecture>.deb
           \`\`\`
 
-          The source tarball was downloaded from the official Ghostty release
-          service and verified with Ghostty's published Minisign key.
+          The source was downloaded from the official Ghostty GitHub repository
+          at the commit referenced by its signed release tag. GitHub's signature
+          verification must pass before building. Source commit and archive
+          SHA-256 are recorded in build-metadata.json.
           EOF
 
       - name: Ensure matching Git tag exists
