@@ -33,7 +33,7 @@ case "$arch" in
     ;;
 esac
 
-for command_name in curl jq tar sha256sum dpkg-deb dpkg-shlibdeps file; do
+for command_name in curl jq tar sha256sum dpkg-deb dpkg-shlibdeps file meson; do
   command -v "$command_name" >/dev/null || {
     echo "required command is missing: $command_name" >&2
     exit 1
@@ -108,7 +108,22 @@ zig_root="$work_dir/zig"
 mkdir -p "$zig_root"
 tar -xJf "$zig_archive" --strip-components=1 -C "$zig_root"
 zig="$zig_root/zig"
-export PATH="$zig_root:$PATH"
+
+blueprint_version="0.20.4"
+blueprint_commit="31b62c24a72c1670d2d93dcdf2d130f1ae12778e"
+blueprint_sha256="9f57adfe8a4607d1bbbd1cd578973b1f2923e130dadd6d99a3d5623d14424afa"
+blueprint_archive="$work_dir/blueprint.tar.gz"
+curl --fail --location --retry 3 --header "$authorization" \
+  --output "$blueprint_archive" \
+  "https://api.github.com/repos/GNOME/blueprint-compiler/tarball/$blueprint_commit"
+printf '%s  %s\n' "$blueprint_sha256" "$blueprint_archive" | sha256sum -c -
+blueprint_source="$work_dir/blueprint-source"
+mkdir -p "$blueprint_source"
+tar -xzf "$blueprint_archive" --strip-components=1 -C "$blueprint_source"
+meson setup --prefix "$work_dir/blueprint" "$blueprint_source/build" "$blueprint_source"
+meson install -C "$blueprint_source/build"
+export PATH="$work_dir/blueprint/bin:$zig_root:$PATH"
+blueprint-compiler --version
 
 local_cache="$work_dir/local-cache"
 cd "$source_dir"
@@ -197,6 +212,7 @@ jq -n \
   --arg source_commit "$source_commit" \
   --arg source_tag_sha "$tag_sha" \
   --arg zig_version "$zig_version" \
+  --arg blueprint_version "$blueprint_version" \
   '{
     ghostty_version: $version,
     debian_version: ($version + "-1"),
@@ -207,6 +223,7 @@ jq -n \
     source_tag_sha: $source_tag_sha,
     source_tag_verified: true,
     zig_version: $zig_version,
+    blueprint_version: $blueprint_version,
     base_distribution: "debian:13"
   }' > "$output_dir/build-metadata.json"
 

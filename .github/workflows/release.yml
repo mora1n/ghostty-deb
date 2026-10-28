@@ -94,7 +94,6 @@ jobs:
           apt-get update
           apt-get install -y --no-install-recommends \
             build-essential \
-            blueprint-compiler \
             ca-certificates \
             curl \
             desktop-file-utils \
@@ -108,8 +107,11 @@ jobs:
             libgtk4-layer-shell-dev \
             libxml2-utils \
             lintian \
+            meson \
+            ninja-build \
             pandoc \
             pkg-config \
+            python3-gi \
             tar \
             xz-utils \
             zstd
