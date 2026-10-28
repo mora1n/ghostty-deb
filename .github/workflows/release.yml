@@ -176,7 +176,9 @@ jobs:
           deb="$(find package -name '*.deb' -print -quit)"
           apt-get install -y "$deb"
           ghostty --version
-          ! ldd /usr/bin/ghostty | grep -F 'not found'
+          if ldd /usr/bin/ghostty | grep -F 'not found'; then
+            exit 1
+          fi
           desktop-file-validate /usr/share/applications/com.mitchellh.ghostty.desktop
           dpkg-query -W -f='${Status}\n' ghostty | grep -F 'install ok installed'
 
@@ -200,7 +202,7 @@ jobs:
         run: |
           set -euo pipefail
           cd release
-          sha256sum *.deb > SHA256SUMS
+          sha256sum ./*.deb > SHA256SUMS
           jq -s --arg version "$VERSION" \
             '{ghostty_version: $version, builds: .}' \
             build-metadata-*.json > build-metadata.json
