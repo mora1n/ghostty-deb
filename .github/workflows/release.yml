@@ -179,7 +179,7 @@ jobs:
       - name: Install and smoke test
         run: |
           set -euo pipefail
-          deb="$(find package -name '*.deb' -print -quit)"
+          deb="$(find "$PWD/package" -name '*.deb' -print -quit)"
           apt-get install -y "$deb"
           ghostty --version
           if ldd /usr/bin/ghostty | grep -F 'not found'; then
