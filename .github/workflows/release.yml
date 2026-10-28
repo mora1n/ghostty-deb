@@ -160,13 +160,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        distribution: [trixie, forky, sid]
+        architecture: [amd64, arm64]
         include:
-          - architecture: amd64
-            runner: ubuntu-24.04
-          - architecture: arm64
-            runner: ubuntu-24.04-arm
+          - {architecture: amd64, runner: ubuntu-24.04}
+          - {architecture: arm64, runner: ubuntu-24.04-arm}
     runs-on: ${{ matrix.runner }}
-    container: debian:13
+    container: debian:${{ matrix.distribution }}
     permissions:
       contents: read
     steps:
@@ -222,12 +222,12 @@ jobs:
             build-metadata-*.json > build-metadata.json
           rm -f build-metadata-*.json
           cat > release-notes.md <<EOF
-          ## Ghostty ${VERSION} for Debian 13
+          ## Ghostty ${VERSION} for Debian
 
-          This release contains native Debian 13 packages for \`amd64\` and \`arm64\`.
+          Packages for \`amd64\` and \`arm64\` are built on Debian 13 (trixie).
+          Both architectures pass installation checks on trixie, forky, and sid.
 
           Install with:
-
           \`\`\`sh
           sudo apt install ./ghostty_${VERSION}-1_<architecture>.deb
           \`\`\`
@@ -266,12 +266,12 @@ jobs:
             gh release upload "$tag" release/*.deb release/SHA256SUMS \
               release/build-metadata.json --clobber
             gh release edit "$tag" \
-              --title "Ghostty ${VERSION} (Debian 13)" \
+              --title "Ghostty ${VERSION} (Debian)" \
               --notes-file release/release-notes.md
           else
             gh release create "$tag" \
               --verify-tag \
-              --title "Ghostty ${VERSION} (Debian 13)" \
+              --title "Ghostty ${VERSION} (Debian)" \
               --notes-file release/release-notes.md \
               release/*.deb release/SHA256SUMS release/build-metadata.json
           fi

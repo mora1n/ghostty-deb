@@ -1,0 +1,65 @@
+name: Verify published Debian packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      ghostty_version:
+        description: Published Ghostty version without the leading v
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        distribution: [trixie, forky, sid]
+        architecture: [amd64, arm64]
+        include:
+          - {architecture: amd64, runner: ubuntu-24.04}
+          - {architecture: arm64, runner: ubuntu-24.04-arm}
+    runs-on: ${{ matrix.runner }}
+    container: debian:${{ matrix.distribution }}
+    env:
+      DEBIAN_FRONTEND: noninteractive
+    steps:
+      - name: Install verification tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates desktop-file-utils gh
+
+      - name: Download and verify published package
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ inputs.ghostty_version }}
+          ARCHITECTURE: ${{ matrix.architecture }}
+        run: |
+          set -euo pipefail
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "::error::ghostty_version must match X.Y.Z"
+            exit 1
+          }
+          deb="ghostty_${VERSION}-1_${ARCHITECTURE}.deb"
+          gh release download "v${VERSION}" --dir package \
+            --pattern "$deb" --pattern SHA256SUMS
+          cd package
+          sha256sum --ignore-missing -c SHA256SUMS
+          [[ "$(dpkg-deb -f "$deb" Package)" == ghostty ]]
+          [[ "$(dpkg-deb -f "$deb" Version)" == "${VERSION}-1" ]]
+          [[ "$(dpkg-deb -f "$deb" Architecture)" == "$ARCHITECTURE" ]]
+          apt-get install -y --no-install-recommends "$PWD/$deb"
+          ghostty --version
+          if ldd /usr/bin/ghostty | grep -F 'not found'; then
+            exit 1
+          fi
+          desktop-file-validate /usr/share/applications/com.mitchellh.ghostty.desktop
+          dpkg-query -W -f='${Status}\n' ghostty | grep -F 'install ok installed'

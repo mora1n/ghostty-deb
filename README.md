@@ -1,6 +1,6 @@
-# Ghostty for Debian 13
+# Ghostty for Debian
 
-This repository builds unofficial Debian 13 packages for [Ghostty](https://ghostty.org/)
+This repository builds unofficial Debian packages for [Ghostty](https://ghostty.org/)
 and publishes them as free GitHub Release assets.
 
 Like `dariogriffo/ghostty-debian`, the package pipeline builds from the official
@@ -20,13 +20,19 @@ secrets or external APT credentials are needed.
 
 ## Supported targets
 
-- Debian 13 (Trixie)
-- `amd64`
-- `arm64`
+| Debian suite | Branch | Architectures |
+| --- | --- | --- |
+| 13 (trixie) | stable | amd64, arm64 |
+| forky | testing | amd64, arm64 |
+| sid | unstable | amd64, arm64 |
 
-The packages are built on native GitHub-hosted runners for both architectures.
-Ubuntu, Debian 12, Debian unstable, and other distributions are outside the
-supported target for the first release.
+Each architecture is built once on Debian 13 using a native GitHub-hosted runner.
+The same package must pass installation checks in clean containers for all three
+suites before publication. The build baseline is not an operating-system lock.
+
+Debian 12 (bookworm) is not supported: its official repositories provide glibc
+2.36 and GTK 4.8, while the current amd64 package requires glibc >= 2.38 and
+GTK >= 4.15.4. Ubuntu and other distributions have not been verified.
 
 ## Install from a release
 
@@ -43,7 +49,7 @@ dependencies after downloading the local package.
 Verify the downloaded package before installation:
 
 ```sh
-sha256sum -c SHA256SUMS
+sha256sum --ignore-missing -c SHA256SUMS
 ```
 
 ## Automation
@@ -51,8 +57,14 @@ sha256sum -c SHA256SUMS
 The upstream checker runs hourly and compares stable `vX.Y.Z` tags in
 `ghostty-org/ghostty` with the releases already published here. A new stable
 version starts one build for each architecture. The release is created only
-after both packages pass metadata, dependency, lint, and clean Debian 13
-installation checks.
+after both packages pass metadata, dependency, lint, and clean installation
+checks on trixie, forky, and sid.
+
+The `Verify published Debian packages` workflow can also check an existing
+release. It downloads the matching package and `SHA256SUMS` directly from the
+release, checks its checksum and metadata, installs it, runs `ghostty --version`,
+checks dynamic dependencies, and validates the desktop file on all six
+suite/architecture combinations. It does not create artifacts or caches.
 
 Each release uses the matching `vX.Y.Z` Git tag, pointing to the packaging
 commit used by that workflow. The workflow creates the tag before publishing
